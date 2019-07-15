@@ -4,11 +4,30 @@ CHROOTER_DIR="$HOME/.chrooter"
 INSTALLED="$CHROOTER_DIR/installed.txt"
 TOOLING="$CHROOTER_DIR/tools"
 
-DEBOOTSTRAP="DEBOOTSTRAP_DIR=$TOOLING/debootstrap/usr/share/debootstrap $TOOLING/debootstrap/usr/sbin/debootstrap"
+DEBOOTSTRAPDIR="$TOOLING/debootstrap"
+DEBOOTSTRAP="DEBOOTSTRAP_DIR=$DEBOOTSTRAPDIR/usr/share/debootstrap $DEBOOTSTRAPDIR/usr/sbin/debootstrap"
 DEBOOTSTRAP_URL='http://ftp.debian.org/debian/pool/main/d/debootstrap/debootstrap_1.0.115_all.deb'
 
-PACSTRAP="$TOOLING/pacstrap"
-PACSTRAP_URL='https://git.archlinux.org/arch-install-scripts.git/plain/pacstrap.in'
+ARCH_BOOTSTRAP_DIR="$TOOLING/arch-bootstrap"
+ARCH_BOOTSTRAP_URL='https://raw.githubusercontent.com/tokland/arch-bootstrap/master/arch-bootstrap.sh'
+ARCH_BOOTSTRAP="$ARCH_BOOTSTRAP_DIR/arch-bootstrap.sh"
+
+function arch_install_bootstrapper()
+{
+echo "Installing Arch bootstrapper"
+curl --create-dirs -Lo "$ARCH_BOOTSTRAP" "$ARCH_BOOTSTRAP_URL"
+chmod +x "$ARCH_BOOTSTRAP"
+}
+
+function arch_install()
+{
+if [[ ! -f "$ARCH_BOOTSTRAP" ]] ; then
+	arch_install_bootstrapper
+fi
+
+echo "Installing Arch..."
+sudo bash -c "'${ARCH_BOOTSTRAP}' -a x86_64 '$1'"
+}
 
 function debian_install_debootstrap()
 {
@@ -21,19 +40,19 @@ local curdir tmpdir
 echo "Installing debootstrap"
 tmpdir=$(mktemp -d)
 cd $tmpdir
-curl -o debootstrap.deb "$DEBOOTSTRAP_URL"
+curl -Lo debootstrap.deb "$DEBOOTSTRAP_URL"
 ar x debootstrap.deb
-mkdir "$TOOLING/debootstrap"
-cp data.tar.gz "$TOOLING/debootstrap"
+mkdir "$DEBOOTSTRAPDIR"
+cp data.tar.gz "$DEBOOTSTRAPDIR"
 curdir=$(pwd)
-cd "$TOOLING/debootstrap"
+cd "$DEBOOTSTRAPDIR"
 sudo tar -xf data.tar.gz
 sudo rm -f data.tar.gz
 cd $curdir
 rm -rf $tmpdir
 }
 
-function install_debian()
+function debian_install()
 {
 if ! (bash -c "$DEBOOTSTRAP --version" > /dev/null 2>&1) ; then
     debian_install_debootstrap
@@ -114,6 +133,37 @@ else
 fi
 }
 
+function enter_chroot()
+{
+mount_filesystems "$1"
+sudo chroot "$1" /bin/bash -c "su $USER --login"
+unmount_filesystems "$1"
+}
+
+function main()
+{
+
+if [[ "$1" == "" ]] ; then
+	echo "Please supply a chroot directory!"
+	exit 1
+fi
+
+if [[ ! -d "$1" ]] ; then
+	echo "Creating directory: $1"
+	mkdir -p "$1"
+	if [[ "$2" == "--install" ]] ; then
+	case "$3" in
+		debian)
+			debian_install "$1"
+			;;
+		arch)
+			arch_install "$1"
+			;;
+	esac
+	fi
+fi
+}
+
 if [ "`id -u`" -eq 0 ] ; then
 	echo "Please do not run this script as root."
 	exit 1
@@ -127,17 +177,4 @@ fi
 if [[ ! -d "$CHROOTER_DIR" ]] ; then mkdir "$CHROOTER_DIR" ; fi
 if [[ ! -d "$TOOLING" ]] ; then mkdir "$TOOLING" ; fi
 
-if [[ "$1" == "" ]] ; then
-	echo "Please supply a chroot directory!"
-	exit 1
-fi
-
-if [[ ! -d "$1" ]] ; then
-	echo "Creating directory: $1"
-	mkdir -p "$1"
-	install_debian "$1"
-fi
-
-mount_filesystems "$1"
-sudo chroot "$1" /bin/bash -c "su $USER --login"
-unmount_filesystems "$1"
+main "$@"
