@@ -1,58 +1,44 @@
 #!/bin/bash
 
-DEBOOTSTRAP='DEBOOTSTRAP_DIR=/opt/debootstrap/usr/share/debootstrap /opt/debootstrap/usr/sbin/debootstrap'
+CHROOTER_DIR="$HOME/.chrooter"
+INSTALLED="$CHROOTER_DIR/installed.txt"
+TOOLING="$CHROOTER_DIR/tools"
+
+DEBOOTSTRAP="DEBOOTSTRAP_DIR=$TOOLING/usr/share/debootstrap $TOOLING/usr/sbin/debootstrap"
 DEBOOTSTRAP_URL='http://ftp.debian.org/debian/pool/main/d/debootstrap/debootstrap_1.0.115_all.deb'
 
-function install_debootstrap()
+PACSTRAP="$TOOLING/pacstrap"
+PACSTRAP_URL='https://git.archlinux.org/arch-install-scripts.git/plain/pacstrap.in'
+
+function debian_install_debootstrap()
 {
+if ! wget -V > /dev/null 2>&1 ; then
+    echo "Please install wget. Required for debootstrap"
+    exit 1
+fi
+
 local curdir tmpdir
 echo "Installing debootstrap"
 tmpdir=$(mktemp -d)
 cd $tmpdir
 curl -o debootstrap.deb "$DEBOOTSTRAP_URL"
 ar x debootstrap.deb
-sudo mkdir -p /opt/debootstrap
-sudo cp data.tar.gz /opt/debootstrap
+mkdir "$TOOLING/debootstrap"
+cp data.tar.gz "$TOOLING/debootstrap"
 curdir=$(pwd)
-cd /opt/debootstrap
+cd "$TOOLING/debootstrap"
 sudo tar -xf data.tar.gz
 sudo rm -f data.tar.gz
 cd $curdir
 rm -rf $tmpdir
 }
 
-function mount_filesystems()
-{
-sudo echo -n '' # just to ensure we still have sudo
-echo -n "Mounting filesystems..."
-if (mount | grep "$1" > /dev/null 2>&1) ; then
-	echo " Already mounted!"
-else
-	sudo mount -t proc /proc "$1/proc"
-	sudo mount -t sysfs /sys "$1/sys"
-	sudo mount -o bind /dev "$1/dev"
-	sudo mount -o bind /dev/pts "$1/dev/pts"
-	echo " Done!"
-fi
-}
-
-function unmount_filesystems()
-{
-sudo echo -n '' # just to ensure we still have sudo
-echo -n "Unmounting filesystems..."
-if (ps a | grep -e "sudo chroot $1 /bin/bash -c su.*--login$" > /dev/null 2>&1) ; then
-	echo " User still logged in!"
-else
-	sudo umount "$1/proc"
-	sudo umount "$1/sys"
-	sudo umount "$1/dev/pts"
-	sudo umount "$1/dev"
-	echo " Done!"
-fi
-}
-
 function install_debian()
 {
+if ! (bash -c "$DEBOOTSTRAP --version" > /dev/null 2>&1) ; then
+    debian_install_debootstrap
+fi
+
 echo "Installing Debian..."
 sudo bash -c "$DEBOOTSTRAP --arch amd64 buster '$1' http://ftp.uk.debian.org/debian/"
 
@@ -98,29 +84,58 @@ echo "Done!"
 unmount_filesystems "$1"
 }
 
+function mount_filesystems()
+{
+sudo echo -n '' # just to ensure we still have sudo
+echo -n "Mounting filesystems..."
+if (mount | grep "$1" > /dev/null 2>&1) ; then
+	echo " Already mounted!"
+else
+	sudo mount -t proc /proc "$1/proc"
+	sudo mount -t sysfs /sys "$1/sys"
+	sudo mount -o bind /dev "$1/dev"
+	sudo mount -o bind /dev/pts "$1/dev/pts"
+	echo " Done!"
+fi
+}
+
+function unmount_filesystems()
+{
+sudo echo -n '' # just to ensure we still have sudo
+echo -n "Unmounting filesystems..."
+if (ps a | grep -e "sudo chroot $1 /bin/bash -c su.*--login$" > /dev/null 2>&1) ; then
+	echo " User still logged in!"
+else
+	sudo umount "$1/proc"
+	sudo umount "$1/sys"
+	sudo umount "$1/dev/pts"
+	sudo umount "$1/dev"
+	echo " Done!"
+fi
+}
+
 if [ "`id -u`" -eq 0 ] ; then
-    echo "Please do not run this script as root."
-    exit 1
+	echo "Please do not run this script as root."
+	exit 1
 fi
 
-if ! wget -V > /dev/null 2>&1 ; then
-    echo "Please install wget. Required for debootstrap"
-    exit 1
+if [[ "$HOME" == "" ]] ; then
+	echo "User home directory needs to be set via HOME env variable to run this script"
+	exit 1
 fi
 
-if ! (bash -c "$DEBOOTSTRAP --version" > /dev/null 2>&1) ; then
-    install_debootstrap
-fi
+if [[ ! -d "$CHROOTER_DIR" ]] ; then mkdir "$CHROOTER_DIR" ; fi
+if [[ ! -d "$TOOLING" ]] ; then mkdir "$TOOLING" ; fi
 
 if [[ "$1" == "" ]] ; then
-    echo "Please supply a chroot directory!"
-    exit 1
+	echo "Please supply a chroot directory!"
+	exit 1
 fi
 
 if [[ ! -d "$1" ]] ; then
-    echo "Creating directory: $1"
-    mkdir -p "$1"
-    install_debian "$1"
+	echo "Creating directory: $1"
+	mkdir -p "$1"
+	install_debian "$1"
 fi
 
 mount_filesystems "$1"
