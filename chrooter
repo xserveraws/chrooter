@@ -4,7 +4,7 @@ CHROOTER_DIR="$HOME/.chrooter"
 INSTALLED="$CHROOTER_DIR/installed.txt"
 TOOLING="$CHROOTER_DIR/tools"
 
-DEBOOTSTRAP="DEBOOTSTRAP_DIR=$TOOLING/usr/share/debootstrap $TOOLING/usr/sbin/debootstrap"
+DEBOOTSTRAP="DEBOOTSTRAP_DIR=$TOOLING/debootstrap/usr/share/debootstrap $TOOLING/debootstrap/usr/sbin/debootstrap"
 DEBOOTSTRAP_URL='http://ftp.debian.org/debian/pool/main/d/debootstrap/debootstrap_1.0.115_all.deb'
 
 PACSTRAP="$TOOLING/pacstrap"
@@ -40,7 +40,7 @@ if ! (bash -c "$DEBOOTSTRAP --version" > /dev/null 2>&1) ; then
 fi
 
 echo "Installing Debian..."
-sudo bash -c "$DEBOOTSTRAP --arch amd64 buster '$1' http://ftp.uk.debian.org/debian/"
+sudo bash -c "${DEBOOTSTRAP} --arch amd64 buster '$1' http://ftp.uk.debian.org/debian/"
 
 sudo echo -n '' # just to ensure we still have sudo
 echo -n "Writing Debian sources file..."
